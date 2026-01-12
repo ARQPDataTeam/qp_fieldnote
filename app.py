@@ -38,8 +38,8 @@ logging.getLogger("azure").setLevel(logging.ERROR)
 if not local:
     app = Dash(__name__,
                 external_stylesheets=[dbc.themes.SLATE],
-                requests_pathname_prefix="/app/AQPD/",
-                routes_pathname_prefix="/app/AQPD/")
+                requests_pathname_prefix="/app/AQPDDEV/",
+                routes_pathname_prefix="/app/AQPDDEV/")
 else:
     app = Dash(__name__,
                 external_stylesheets=[dbc.themes.SLATE])
