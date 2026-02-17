@@ -1,0 +1,24 @@
+/* assets/placeholder_styles.css */
+
+/* Styling for the placeholder text within AG Grid cells */
+/* Increased specificity to target the actual text within the cell */
+.ag-cell.ag-cell-value.ag-placeholder-text {
+    color: #888 !important; /* Light grey color */
+    font-style: italic !important; /* Italicize for a placeholder look */
+    opacity: 0.7 !important; /* Make it slightly translucent */
+    /* Add !important to ensure these styles override AG Grid's default styles */
+}
+
+/* Style for the text input when it's being edited and has the placeholder class */
+.ag-cell-inline-editing .ag-placeholder-text input {
+    color: #888 !important;
+    font-style: italic !important;
+    opacity: 0.7 !important;
+}
+
+/* Ensure the text color reverts to default when actual value is typed */
+.ag-cell.ag-cell-value:not(.ag-placeholder-text) {
+    color: inherit !important; /* Revert to default text color */
+    font-style: normal !important; /* Revert to normal font style */
+    opacity: 1 !important; /* Revert to full opacity */
+}
