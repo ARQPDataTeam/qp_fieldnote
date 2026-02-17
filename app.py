@@ -4,13 +4,14 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine,text
-from credentials import sql_engine_string_generator
+from credentials import get_host_environment, get_credentials, create_dash_app
 from flask import request
 from datetime import datetime
 import os
 import logging
 from dash_breakpoints import WindowBreakpoints
 import socket
+import traceback
 
 # Local dev boolean
 computer = socket.gethostname()
@@ -20,7 +21,7 @@ else:
     local = False
 
 # Version number to display
-version = "2.3"
+version = "2.4"
 
 # Setup logger
 if not os.path.exists('logs'):
@@ -33,25 +34,26 @@ logging.basicConfig(
     level = 20)
 
 logging.getLogger("azure").setLevel(logging.ERROR)
-
-#initialize the dash app as 'app'
-if not local:
-    app = Dash(__name__,
-                external_stylesheets=[dbc.themes.SLATE],
-                requests_pathname_prefix="/app/AQPD/",
-                routes_pathname_prefix="/app/AQPD/")
-else:
-    app = Dash(__name__,
-                external_stylesheets=[dbc.themes.SLATE])
+logger = logging.getLogger(__name__)
 
 # Global variable to store headers
 request_headers = {}
 
-# # Get connection string
-# sql_engine_string=sql_engine_string_generator('DATAHUB_PSQL_SERVER','DATAHUB_SWAPIT_DBNAME','DATAHUB_PSQL_EDITUSER','DATAHUB_PSQL_EDITPASSWORD')
-# swapit_sql_engine=create_engine(sql_engine_string)
+# set up path details
+parent_dir = os.getcwd()
+path_prefix = '/' + os.path.basename(os.path.normpath(parent_dir)) + '/'
 
-sql_engine_string=sql_engine_string_generator('DATAHUB_PSQL_SERVER','dcp','DATAHUB_PSQL_EDITUSER','DATAHUB_PSQL_EDITPASSWORD',local)
+# set up the sql connection string
+COMPUTER, SERVER, VIEWER_USER, VIEWER_PASSWORD, EDITOR_USER, EDITOR_PASSWORD, DATABASE, URL_PREFIX = get_credentials(parent_dir)
+
+# determine host environment
+host = get_host_environment(COMPUTER)
+
+# initialize the app based on host, specify the url_prefix if needed
+app, server = create_dash_app(host, path_prefix, URL_PREFIX)
+
+# # Get connection string
+sql_engine_string=('postgresql://{}:{}@{}/{}?sslmode=require').format(EDITOR_USER,EDITOR_PASSWORD,SERVER,'dcp')
 dcp_sql_engine=create_engine(sql_engine_string)
 
 
@@ -104,7 +106,7 @@ def change_layout(breakpoint_name: str, window_width: int):
     if breakpoint_name=="sm":
         return([
             #title + instructions
-            html.H1('QP Field Log'),
+            html.H1('QP FieldNote'),
             html.Div([
                 html.Span('Required fields indicated by '),
                 html.Span('*',style={"color": "red","font-weight": "bold"})
@@ -123,7 +125,7 @@ def change_layout(breakpoint_name: str, window_width: int):
                     dcc.Input(
                         style={'textAlign': 'center'},
                         id = "user",
-                        placeholder="...",
+                        placeholder="..."
                     ),
                     html.Br()],
                     width = 8
@@ -250,7 +252,7 @@ def change_layout(breakpoint_name: str, window_width: int):
                         html.Span('*',style={"color": "red","font-weight": "bold"})
                     ])),
                     dbc.Input(
-                        value = datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        value = datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                         placeholder="...",
                         id = "startdt",
                         type="datetime-local",
@@ -330,7 +332,7 @@ def change_layout(breakpoint_name: str, window_width: int):
         return([
             dbc.Row([
                 #title + instructions
-                html.H1('QP Field Log'),
+                html.H1('QP FieldNote'),
                 html.Div([
                     html.Span('Required fields indicated by '),
                     html.Span('*',style={"color": "red","font-weight": "bold"})
@@ -483,7 +485,7 @@ def change_layout(breakpoint_name: str, window_width: int):
                                 html.Span('*',style={"color": "red","font-weight": "bold"})
                             ])),
                             dbc.Input(
-                                value = datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                value = datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                                 placeholder="...",
                                 id = "startdt",
                                 type="datetime-local",
@@ -594,7 +596,7 @@ def project_update(project,temp_var,breakpoint_name: str):
         # Find database corresponding to selected project
         database = databases['database'].loc[databases['label']==project].tolist()[0]  
         
-        sql_engine_string=sql_engine_string_generator('DATAHUB_PSQL_SERVER',database,'DATAHUB_PSQL_EDITUSER','DATAHUB_PSQL_EDITPASSWORD',local)
+        sql_engine_string=('postgresql://{}:{}@{}/{}?sslmode=require').format(EDITOR_USER,EDITOR_PASSWORD,SERVER,database)
         sql_engine=create_engine(sql_engine_string)
         
         logs = pd.read_sql_query(
@@ -749,9 +751,9 @@ def button_update(user,project,site,instrument,startdt,timezone,flag_cat,flag,no
 def upload_log(n,site,instrument,project,startdt,timezone,userinput,note,flag):
     # Find database corresponding to selected project
     database = databases['database'].loc[databases['label']==project].tolist()[0]  
-    
-    sql_engine_string=sql_engine_string_generator('DATAHUB_PSQL_SERVER',database,'DATAHUB_PSQL_EDITUSER','DATAHUB_PSQL_EDITPASSWORD',local)
+    sql_engine_string=('postgresql://{}:{}@{}/{}?sslmode=require').format(EDITOR_USER,EDITOR_PASSWORD,SERVER,database)
     sql_engine=create_engine(sql_engine_string)
+    
     
     # create db connection
     with sql_engine.connect() as conn:
@@ -761,6 +763,7 @@ def upload_log(n,site,instrument,project,startdt,timezone,userinput,note,flag):
                        (sites['projectid']==project)]['siteid'].tolist()[0]
         submitdt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         startdt = startdt.replace("T", " ")
+        note = note or "" 
         if isinstance(note,list):
             note = ','.join(note)
             
@@ -788,6 +791,7 @@ def upload_log(n,site,instrument,project,startdt,timezone,userinput,note,flag):
             note.replace("'","''"),'', 
             instrument,flag_shortcode))
             
+    
             conn.execute(tz_set_query)
             conn.execute(InsertLog)
             conn.commit()
@@ -800,7 +804,7 @@ def upload_log(n,site,instrument,project,startdt,timezone,userinput,note,flag):
             
             logging.exception(e)
             
-            return ["Upload to database not successful!",
+            return [traceback.format_exc(),
                     {"color": "red","font-weight": "bold","font-size": "large"},
                     False,
                     "Ready to submit"]
@@ -817,7 +821,8 @@ def display_headers(_):
     if request_headers.get('Dh-User'):
         return [request_headers.get('Dh-User'),True,{'display':'none'}]
     else:
-        return [None,False,{'display':'flex'}]
+        #return [None,False,{'display':'flex'}]
+        return ['YousifM',False,{'display':'none'}]
 
 
 
@@ -827,7 +832,7 @@ def before_request():
     global request_headers
     request_headers = dict(request.headers)  # Capture headers before processing any request
 
-#%% Log print statements
+#%% Print log statements
 @app.callback(
     Output('logs', 'children'),
     Input('log_updater', 'n_intervals')
@@ -837,9 +842,8 @@ def update_log(n):
         return log.read()
 
 app.layout = serve_layout
-
-if not local:
-    server = app.server
-else:
-    if __name__=='__main__':
-        app.run_server(debug=True,port=8080)
+if __name__ == "__main__":
+    if host == "local":
+        app.run(debug=True,port=8080)
+    else:
+        app.run(debug=False,port=8080)
